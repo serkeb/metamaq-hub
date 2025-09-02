@@ -39,12 +39,13 @@ export function ChatwootAPI() {
     }
   };
 
-  const loadConversations = async () => {
+const loadConversations = async () => {
     setLoading(true);
     try {
       const response = await fetch(`${SUPABASE_PROXY_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/conversations`);
       const data = await response.json();
-      setConversations(data.payload || []);
+      // CORRECCIÓN: Accedemos a data.data.payload para obtener la lista de conversaciones.
+      setConversations(data.data.payload || []); 
       setError(null);
     } catch (err) {
       setError('Error al cargar conversaciones');
