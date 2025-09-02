@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { MessageSquare, Send, RefreshCw, User, Clock, CheckCircle, AlertCircle, Tag, Phone, Mail, Globe, Settings, Edit2, Save, X, Plus } from 'lucide-react'
 
-const BACKEND_URL = 'https://0vhlizc353xy.manus.space'
+const BACKEND_URL = 'https://ovvwfgqkbhezcsegrdtz.supabase.co/functions/v1/chatwoot-api-proxy'
 
 export function ChatwootAPI() {
   const [conversations, setConversations] = useState([])
