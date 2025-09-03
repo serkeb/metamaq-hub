@@ -16,9 +16,9 @@ serve(async (req: Request) => {
 
   try {
     // --- Lógica del Proxy ---
-    const chatwootUrl = Deno.env.get("CHATWOOT_URL");
-    const chatwootToken = Deno.env.get("CHATWOOT_API_TOKEN");
-    const chatwootAccountId = Deno.env.get("CHATWOOT_ACCOUNT_ID");
+    const chatwootUrl = "https://chatwoot-chatwoot.xmhjrf.easypanel.host";
+    const chatwootToken = "rtvCeU59uWofWaWBAPXYGiu1";
+    const chatwootAccountId = "2";
 
     if (!chatwootUrl || !chatwootToken || !chatwootAccountId) {
       throw new Error("Faltan secretos de Chatwoot en la configuración de la Edge Function.");
