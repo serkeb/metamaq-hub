@@ -1,65 +1,75 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 
-// Definimos las cabeceras CORS aquí mismo para mayor claridad
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Permite peticiones desde cualquier origen
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Define la URL base de tu instancia de Chatwoot y el token de API desde las variables de entorno.
+const CHATWOOT_BASE_URL = Deno.env.get('CHATWOOT_URL')
+const API_ACCESS_TOKEN = Deno.env.get('CHATWOOT_API_ACCESS_TOKEN')
 
-serve(async (req: Request) => {
-  // Este es el cambio más importante:
-  // Si la petición es de tipo OPTIONS (la de permiso), respondemos inmediatamente
-  // con las cabeceras correctas y terminamos la ejecución.
+serve(async (req) => {
+  // Asegúrate de que las variables de entorno estén configuradas.
+  if (!CHATWOOT_BASE_URL || !API_ACCESS_TOKEN) {
+    return new Response(
+      JSON.stringify({ error: 'Las variables de entorno no están configuradas en Supabase.' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // Captura la ruta de la petición entrante para añadirla a la URL de Chatwoot.
+  // Ejemplo: si la petición es a /api/v1/accounts/1/conversations, 
+  // url.pathname será /api/v1/accounts/1/conversations.
+  const url = new URL(req.url)
+  const targetUrl = `${CHATWOOT_BASE_URL}${url.pathname}`
+
+  // Prepara las cabeceras para la petición a Chatwoot.
+  // Aquí es donde se añade el token secreto de la API.
+  const headers = new Headers(req.headers)
+  headers.set('api_access_token', API_ACCESS_TOKEN)
+  headers.set('Content-Type', 'application/json')
+
+  // Maneja las peticiones OPTIONS (preflight) para CORS.
+  // Esto es crucial para que el navegador permita las peticiones desde tu CRM.
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*', // O tu dominio específico para más seguridad
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, api_access_token',
+      },
+    })
   }
 
   try {
-    // --- Lógica del Proxy ---
-    const chatwootUrl = "https://chatwoot-chatwoot.xmhjrf.easypanel.host";
-    const chatwootToken = "rtvCeU59uWofWaWBAPXYGiu1";
-    const chatwootAccountId = "2";
+    // Realiza la petición a la API de Chatwoot con el método, cabeceras y cuerpo originales.
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers: headers,
+      body: req.body,
+    })
 
-    if (!chatwootUrl || !chatwootToken || !chatwootAccountId) {
-      throw new Error("Faltan secretos de Chatwoot en la configuración de la Edge Function.");
-    }
-
-    const requestUrl = new URL(req.url);
-    // Extraemos la ruta que el frontend quiere consultar en la API de Chatwoot
-    const path = requestUrl.pathname.replace('/chatwoot-api-proxy', '');
-
-    // Construimos la URL final para la API de Chatwoot
-    const apiUrl = `${chatwootUrl}${path}`;
-
-    // Hacemos la llamada a Chatwoot
-    const response = await fetch(apiUrl, {
-      headers: {
-        "api_access_token": chatwootToken,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      console.error(`Error de Chatwoot: ${response.statusText}`);
-      throw new Error(`La API de Chatwoot devolvió un error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Devolvemos la respuesta de Chatwoot al frontend, añadiendo las cabeceras CORS
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
-
+    // Devuelve la respuesta de Chatwoot directamente al cliente (tu CRM).
+    // No olvides añadir las cabeceras CORS a la respuesta final.
+    const responseHeaders = new Headers(response.headers)
+    responseHeaders.set('Access-Control-Allow-Origin', '*') // O tu dominio
+    
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    })
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
-    console.error("Error en la función proxy:", errorMessage);
-
-    // MUY IMPORTANTE: Devolvemos el error con las cabeceras CORS
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+  // Creamos una variable para el mensaje de error.
+  let errorMessage = "Error desconocido";
+  
+  // Verificamos si el error es una instancia de la clase Error.
+  if (error instanceof Error) {
+    // Si lo es, ahora TypeScript sabe que tiene una propiedad .message.
+    errorMessage = error.message;
   }
-});
+
+  // Captura cualquier error de red o de otro tipo.
+  return new Response(
+    JSON.stringify({ error: 'Error al conectar con la API de Chatwoot.', details: errorMessage }),
+    { status: 502, headers: { 'Content-Type': 'application/json' } }
+  )
+}
+})
