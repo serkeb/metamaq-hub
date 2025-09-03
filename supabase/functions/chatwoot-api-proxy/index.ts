@@ -1,20 +1,21 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
-// CORRECCIÓN: Agregamos PUT y DELETE a los métodos permitidos
+// Definimos las cabeceras CORS aquí mismo para mayor claridad
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*', // Permite peticiones desde cualquier origen
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE', // ⬅️ AGREGADO PUT Y DELETE
 };
 
 serve(async (req: Request) => {
-  // Manejar solicitudes OPTIONS (preflight)
+  // Este es el cambio más importante:
+  // Si la petición es de tipo OPTIONS (la de permiso), respondemos inmediatamente
+  // con las cabeceras correctas y terminamos la ejecución.
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Variables de entorno de Chatwoot
+    // --- Lógica del Proxy ---
     const chatwootUrl = Deno.env.get("CHATWOOT_URL");
     const chatwootToken = Deno.env.get("CHATWOOT_API_TOKEN");
     const chatwootAccountId = Deno.env.get("CHATWOOT_ACCOUNT_ID");
@@ -24,75 +25,38 @@ serve(async (req: Request) => {
     }
 
     const requestUrl = new URL(req.url);
-    // Extraer la ruta que el frontend quiere consultar
-    const path = requestUrl.pathname.replace('/functions/v1/chatwoot-api-proxy', '');
-    
-    // Construir la URL final para Chatwoot
-    const apiUrl = `${chatwootUrl}${path}${requestUrl.search}`;
+    // Extraemos la ruta que el frontend quiere consultar en la API de Chatwoot
+    const path = requestUrl.pathname.replace('/chatwoot-api-proxy', '');
 
-    // CORRECCIÓN: Configurar headers y body según el método
-    const headers = {
-      "api_access_token": chatwootToken,
-      "Content-Type": "application/json",
-    };
+    // Construimos la URL final para la API de Chatwoot
+    const apiUrl = `${chatwootUrl}${path}`;
 
-    let body = undefined;
-    
-    // Si el método no es GET, leer el body de la petición
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      try {
-        body = await req.text();
-      } catch (error) {
-        console.log('No se pudo leer el body de la petición:', error);
-      }
-    }
-
-    console.log(`Proxying ${req.method} request to: ${apiUrl}`);
-    if (body) {
-      console.log('Body:', body);
-    }
-
-    // CORRECCIÓN: Hacer la petición a Chatwoot con el método correcto
+    // Hacemos la llamada a Chatwoot
     const response = await fetch(apiUrl, {
-      method: req.method, // ⬅️ Usar el método original (GET, POST, PUT, DELETE)
-      headers: headers,
-      body: body, // ⬅️ Pasar el body si existe
+      headers: {
+        "api_access_token": chatwootToken,
+        "Content-Type": "application/json",
+      },
     });
 
     if (!response.ok) {
-      console.error(`Error de Chatwoot: ${response.status} ${response.statusText}`);
-      const errorText = await response.text();
-      console.error('Error response:', errorText);
-      
-      return new Response(JSON.stringify({ 
-        error: `La API de Chatwoot devolvió un error: ${response.status}`,
-        details: errorText
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: response.status,
-      });
+      console.error(`Error de Chatwoot: ${response.statusText}`);
+      throw new Error(`La API de Chatwoot devolvió un error: ${response.status}`);
     }
 
-    // Leer la respuesta de Chatwoot
-    const data = await response.text();
-    let jsonData;
-    
-    try {
-      jsonData = JSON.parse(data);
-    } catch (error) {
-      jsonData = { data: data };
-    }
+    const data = await response.json();
 
-    // Devolver la respuesta con CORS headers
-    return new Response(JSON.stringify(jsonData), {
+    // Devolvemos la respuesta de Chatwoot al frontend, añadiendo las cabeceras CORS
+    return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: response.status,
+      status: 200,
     });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Error desconocido";
     console.error("Error en la función proxy:", errorMessage);
 
+    // MUY IMPORTANTE: Devolvemos el error con las cabeceras CORS
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
