@@ -7,7 +7,7 @@ const SUPABASE_PROXY_URL = 'https://ovvwfgqkbhezcsegrdtz.supabase.co/functions/v
 // 2. Definimos el ID de tu cuenta de Chatwoot para construir las URLs.
 const CHATWOOT_ACCOUNT_ID = '2'; // Asegúrate de que este ID sea el correcto para tu cuenta.
 
-export default function ChatwootAPI() {
+export function ChatwootAPI() {
   const [conversations, setConversations] = useState([])
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [messages, setMessages] = useState([])
